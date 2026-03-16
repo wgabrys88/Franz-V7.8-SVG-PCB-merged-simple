@@ -1,8 +1,3 @@
-
-
-# README.md
-
-```markdown
 # FranzAi-Plumbing
 
 **A dumb plumbing system that lets AI agents control a Windows desktop.**
@@ -328,7 +323,7 @@ Then open `http://127.0.0.1:1236` in Chrome. The viewer shows the same diagram w
 - Windows 11
 - Latest Google Chrome
 - LM Studio running on port 1235
-```
+
 
 ---
 
