@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Panel</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0c;width:100vw;height:100vh;overflow:hidden;color-scheme:dark;font-family:"Cascadia Code","Fira Code","Consolas",monospace}
+#board{width:100%;height:100%;display:block}
+
+.chip-body{background:#131318;color:#e0e0ea;font-family:"Cascadia Code","Fira Code","Consolas",monospace;font-size:9px;display:flex;flex-direction:column;overflow:hidden;height:100%;width:100%;border-radius:5px}
+.chip-head{display:flex;align-items:center;gap:4px;padding:3px 6px;background:#1a1a22;border-bottom:1px solid #252530;flex-shrink:0;cursor:grab;user-select:none}
+.chip-head:active{cursor:grabbing}
+.chip-agent{font-size:8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:1px 6px;border-radius:6px}
+.chip-ts{font-size:7px;color:#555568;margin-left:auto}
+.chip-images{display:flex;flex:0 0 35%;min-height:24px;overflow:hidden;background:#0a0a0c}
+.chip-img-half{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;padding:1px}
+.chip-img-half:first-child{border-right:1px solid #252530}
+.chip-img-half img{max-width:100%;max-height:100%;object-fit:contain;display:none}
+.chip-img-half .tag{position:absolute;top:1px;left:3px;font-size:6px;color:#555568;text-transform:uppercase;letter-spacing:.06em;pointer-events:none}
+.chip-img-half .ph{color:#252530;font-size:7px}
+.chip-text{flex:1;overflow:auto;padding:2px 5px;font-size:7px;line-height:1.4;white-space:pre-wrap;word-break:break-word;border-bottom:1px solid #252530;min-height:14px}
+.chip-text.sys{color:#a78bfa;background:rgba(167,139,250,0.04)}
+.chip-text.usr{color:#60a5fa;background:rgba(96,165,250,0.04)}
+.chip-text.reply{color:#34d399;background:rgba(52,211,153,0.04)}
+.chip-text .ph{color:#252530;font-weight:normal}
+.chip-fr{display:inline-block;font-size:6px;padding:0 4px;border-radius:3px;margin-left:4px;font-weight:700;vertical-align:middle}
+.chip-fr.stop{background:rgba(52,211,153,0.2);color:#34d399}
+.chip-fr.length{background:rgba(255,68,85,0.2);color:#ff4455}
+.chip-fr.error{background:rgba(255,68,85,0.3);color:#ff4455}
+.chip-fr.unknown{background:rgba(136,136,160,0.2);color:#8888a0}
+
+.ctrl-bar{background:rgba(19,19,24,0.95);display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:6px;border:1px solid #252530;position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:999;backdrop-filter:blur(8px)}
+.ctrl-btn{background:#1a1a22;border:1px solid #252530;color:#e0e0ea;padding:3px 10px;font-size:9px;font-family:inherit;cursor:pointer;border-radius:3px}
+.ctrl-btn:hover{background:#252530}
+.ctrl-speed{font-size:9px;color:#8888a0;min-width:36px;text-align:center}
+.ctrl-progress{flex:0 0 180px;height:5px;background:#1a1a22;border-radius:3px;cursor:pointer;overflow:hidden}
+.ctrl-fill{height:100%;background:#4a9eff;border-radius:3px;width:0%;transition:width .15s}
+.ctrl-text{font-size:8px;color:#555568;white-space:nowrap}
+.ctrl-dot{width:6px;height:6px;border-radius:50%;background:#ff4455;flex-shrink:0}
+.ctrl-dot.live{background:#3ecf8e}
+
+.resize-handle{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;opacity:0;background:linear-gradient(135deg,transparent 50%,#4a9eff 50%);border-radius:0 0 5px 0}
+.chip-body:hover .resize-handle{opacity:0.6}
+
+.elog-body{background:#0d0d12;color:#b0b0c0;font-family:"Cascadia Code","Fira Code","Consolas",monospace;font-size:7px;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column}
+.elog-head{padding:3px 6px;background:#1a1a22;border-bottom:1px solid #252530;font-size:8px;font-weight:700;color:#555568;flex-shrink:0;cursor:grab;user-select:none}
+.elog-head:active{cursor:grabbing}
+.elog-list{flex:1;overflow:auto}
+.elog-row{padding:1px 4px;border-bottom:1px solid #111118;white-space:nowrap;display:flex;gap:6px}
+.elog-row.err{color:#ff4455}
+.elog-ts{color:#555568;flex-shrink:0}
+.elog-ev{color:#4a9eff;flex-shrink:0;min-width:80px}
+.elog-lbl{color:#b0b0c0;overflow:hidden;text-overflow:ellipsis}
+.elog-ag{color:#3ecf8e;flex-shrink:0;min-width:50px}
+
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:#0a0a0c}
+::-webkit-scrollbar-thumb{background:#252530;border-radius:2px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/MotionPathPlugin.min.js"></script>
+</head>
+<body>
+<svg id="board" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#555568"/>
+  </marker>
+  <marker id="ah-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#4a9eff"/>
+  </marker>
+  <marker id="ah-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#ff4455"/>
+  </marker>
+</defs>
+</svg>
+
+<div class="ctrl-bar" id="ctrl-bar" style="display:none">
+  <span class="ctrl-dot" id="cdot"></span>
+  <button class="ctrl-btn" id="cp">Play</button>
+  <button class="ctrl-btn" id="cpa">Pause</button>
+  <button class="ctrl-btn" id="cs">Step</button>
+  <button class="ctrl-btn" id="cr">Reset</button>
+  <button class="ctrl-btn" id="cm">&minus;</button>
+  <span class="ctrl-speed" id="csp">1.0x</span>
+  <button class="ctrl-btn" id="cf">+</button>
+  <div class="ctrl-progress" id="cpb"><div class="ctrl-fill" id="cpf"></div></div>
+  <span class="ctrl-text" id="cpt">0/0</span>
+</div>
+
+<script type="module">
+gsap.registerPlugin(MotionPathPlugin);
+
+const IS_FILE = location.protocol === 'file:';
+const PANEL = IS_FILE ? 'http://127.0.0.1:1236' : '';
+const SENTINEL = 'NONE';
+const NS = 'http://www.w3.org/2000/svg';
+const board = document.getElementById('board');
+let currentSpeed = 1.0;
+let totalEvents = 0;
+
+let viewX = 0, viewY = 0, viewScale = 1.0;
+
+function applyView() {
+  const vw = window.innerWidth / viewScale;
+  const vh = window.innerHeight / viewScale;
+  board.setAttribute('viewBox', `${viewX} ${viewY} ${vw} ${vh}`);
+}
+
+window.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const rect = board.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  const oldW = window.innerWidth / viewScale;
+  const oldH = window.innerHeight / viewScale;
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  viewScale = Math.max(0.15, Math.min(5.0, viewScale * factor));
+  const newW = window.innerWidth / viewScale;
+  const newH = window.innerHeight / viewScale;
+  viewX += (oldW - newW) * mx;
+  viewY += (oldH - newH) * my;
+  applyView();
+}, {passive: false});
+
+let panning = false, panSX = 0, panSY = 0, panVX = 0, panVY = 0;
+board.addEventListener('mousedown', (e) => {
+  if (e.target !== board && e.target.tagName !== 'rect') return;
+  if (e.target.id && !e.target.id.startsWith('bg-')) {
+    const p = e.target.closest('g');
+    if (p && p.id && (p.id.startsWith('agent-') || p.id.startsWith('infra-') || p.id === 'event-log-chip')) return;
+  }
+  panning = true;
+  panSX = e.clientX; panSY = e.clientY;
+  panVX = viewX; panVY = viewY;
+  board.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', (e) => {
+  if (!panning) return;
+  viewX = panVX - (e.clientX - panSX) / viewScale;
+  viewY = panVY - (e.clientY - panSY) / viewScale;
+  applyView();
+});
+window.addEventListener('mouseup', () => { panning = false; board.style.cursor = ''; });
+window.addEventListener('resize', applyView);
+applyView();
+
+const bgRect = document.createElementNS(NS, 'rect');
+bgRect.id = 'bg-main';
+bgRect.setAttribute('x', '-5000'); bgRect.setAttribute('y', '-5000');
+bgRect.setAttribute('width', '15000'); bgRect.setAttribute('height', '15000');
+bgRect.setAttribute('fill', '#0a0a0c');
+board.appendChild(bgRect);
+
+const traceLayer = document.createElementNS(NS, 'g'); traceLayer.id = 'trace-layer'; board.appendChild(traceLayer);
+const nodeLayer = document.createElementNS(NS, 'g'); nodeLayer.id = 'node-layer'; board.appendChild(nodeLayer);
+const packetLayer = document.createElementNS(NS, 'g'); packetLayer.id = 'packet-layer'; board.appendChild(packetLayer);
+
+const INFRA = {
+  panel:   {x: 700, y: 400, w: 200, h: 130, label: 'Panel :1236', color: '#c084fc',
+    pins: {
+      vlm_out:     {side: 'right',  idx: 0, total: 2},
+      vlm_in:      {side: 'right',  idx: 1, total: 2},
+      browser_out: {side: 'top',    idx: 0, total: 2},
+      browser_in:  {side: 'top',    idx: 1, total: 2},
+      capture_out: {side: 'bottom', idx: 0, total: 3},
+      capture_in:  {side: 'bottom', idx: 1, total: 3},
+      device_out:  {side: 'bottom', idx: 2, total: 3},
+      device_in:   {side: 'left',   idx: 0, total: 1},
+    }},
+  vlm:     {x: 1200, y: 400, w: 200, h: 100, label: 'LM Studio :1235', color: '#4a9eff',
+    pins: {
+      in:  {side: 'left', idx: 0, total: 2},
+      out: {side: 'left', idx: 1, total: 2},
+    }},
+  win32:   {x: 700, y: 720, w: 200, h: 100, label: 'win32.py', color: '#ff4455',
+    pins: {
+      capture_in:  {side: 'top', idx: 0, total: 4},
+      capture_out: {side: 'top', idx: 1, total: 4},
+      device_in:   {side: 'top', idx: 2, total: 4},
+      device_out:  {side: 'top', idx: 3, total: 4},
+    }},
+  browser: {x: 700, y: 100, w: 200, h: 100, label: 'Chrome UI', color: '#f0a000',
+    pins: {
+      annotate_in:  {side: 'bottom', idx: 0, total: 2},
+      annotate_out: {side: 'bottom', idx: 1, total: 2},
+    }},
+};
+
+const FIXED_TRACES = [
+  {id: 'panel.vlm_out->vlm.in',                    from: ['panel','vlm_out'],      to: ['vlm','in']},
+  {id: 'vlm.out->panel.vlm_in',                    from: ['vlm','out'],            to: ['panel','vlm_in']},
+  {id: 'panel.browser_out->browser.annotate_in',    from: ['panel','browser_out'],  to: ['browser','annotate_in']},
+  {id: 'browser.annotate_out->panel.browser_in',    from: ['browser','annotate_out'],to: ['panel','browser_in']},
+  {id: 'panel.capture_out->win32.capture_in',       from: ['panel','capture_out'],  to: ['win32','capture_in']},
+  {id: 'win32.capture_out->panel.capture_in',       from: ['win32','capture_out'],  to: ['panel','capture_in']},
+  {id: 'panel.device_out->win32.device_in',         from: ['panel','device_out'],   to: ['win32','device_in']},
+  {id: 'win32.device_out->panel.device_in',         from: ['win32','device_out'],   to: ['panel','device_in']},
+];
+
+const EVENT_TRACE_MAP = {
+  'vlm_forward':       'panel.vlm_out->vlm.in',
+  'vlm_response':      'vlm.out->panel.vlm_in',
+  'vlm_error':         'vlm.out->panel.vlm_in',
+  'annotate_sent':     'panel.browser_out->browser.annotate_in',
+  'annotate_received': 'browser.annotate_out->panel.browser_in',
+  'annotate_timeout':  'browser.annotate_out->panel.browser_in',
+  'capture_done':      'win32.capture_out->panel.capture_in',
+  'capture_failed':    'win32.capture_out->panel.capture_in',
+  'capture_empty':     'win32.capture_out->panel.capture_in',
+  'action_dispatch':   'panel.device_out->win32.device_in',
+  'device_done':       'win32.device_out->panel.device_in',
+};
+
+const AGENT_COLORS = ['#f97316','#a3e635','#ff4455','#4a9eff','#c084fc','#06b6d4','#3ecf8e','#f0a000'];
+let agentColorIdx = 0;
+const agentColorMap = new Map();
+function agentColor(name) {
+  if (!agentColorMap.has(name)) agentColorMap.set(name, AGENT_COLORS[agentColorIdx++ % AGENT_COLORS.length]);
+  return agentColorMap.get(name);
+}
+
+const infraEls = {};
+const agentChips = new Map();
+const traceEls = {};
+
+function pinPos(nodeId, pinName) {
+  const n = INFRA[nodeId];
+  const pin = n.pins[pinName];
+  const dim = (pin.side === 'top' || pin.side === 'bottom') ? n.w : n.h;
+  const s = dim / (pin.total + 1);
+  const off = s * (pin.idx + 1);
+  switch (pin.side) {
+    case 'top':    return {x: n.x + off, y: n.y};
+    case 'bottom': return {x: n.x + off, y: n.y + n.h};
+    case 'left':   return {x: n.x,       y: n.y + off};
+    case 'right':  return {x: n.x + n.w, y: n.y + off};
+  }
+  return {x: n.x, y: n.y};
+}
+
+function buildInfraChip(id, cfg) {
+  const g = document.createElementNS(NS, 'g');
+  g.id = `infra-${id}`;
+  const rect = document.createElementNS(NS, 'rect');
+  rect.setAttribute('x', cfg.x); rect.setAttribute('y', cfg.y);
+  rect.setAttribute('width', cfg.w); rect.setAttribute('height', cfg.h);
+  rect.setAttribute('rx', '6'); rect.setAttribute('fill', '#131318');
+  rect.setAttribute('stroke', cfg.color); rect.setAttribute('stroke-width', '2');
+  rect.id = `infra-rect-${id}`;
+  g.appendChild(rect);
+  const text = document.createElementNS(NS, 'text');
+  text.setAttribute('x', cfg.x + cfg.w / 2); text.setAttribute('y', cfg.y + cfg.h / 2);
+  text.setAttribute('text-anchor', 'middle'); text.setAttribute('dominant-baseline', 'middle');
+  text.setAttribute('fill', cfg.color);
+  text.setAttribute('font-family', 'Cascadia Code,Fira Code,Consolas,monospace');
+  text.setAttribute('font-size', '11'); text.setAttribute('font-weight', '700');
+  text.textContent = cfg.label;
+  g.appendChild(text);
+  if (cfg.pins) {
+    for (const [pName] of Object.entries(cfg.pins)) {
+      const pp = pinPos(id, pName);
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', pp.x); dot.setAttribute('cy', pp.y);
+      dot.setAttribute('r', '3'); dot.setAttribute('fill', '#252530');
+      dot.setAttribute('stroke', cfg.color); dot.setAttribute('stroke-width', '0.5');
+      dot.id = `pin-${id}-${pName}`;
+      g.appendChild(dot);
+    }
+  }
+  nodeLayer.appendChild(g);
+  infraEls[id] = {g, rect};
+}
+
+for (const [id, cfg] of Object.entries(INFRA)) buildInfraChip(id, cfg);
+
+const CHIP_W = 300, CHIP_H = 240;
+const GRID_COLS = 3, GRID_GAP = 16;
+const BRAIN_X = 30, BRAIN_Y = 80, BRAIN_PAD = 14;
+let brainOutline = null;
+
+function buildBrainOutline() {
+  if (brainOutline) brainOutline.remove();
+  brainOutline = document.createElementNS(NS, 'rect');
+  brainOutline.setAttribute('rx', '10');
+  brainOutline.setAttribute('fill', 'rgba(62,207,142,0.03)');
+  brainOutline.setAttribute('stroke', '#3ecf8e');
+  brainOutline.setAttribute('stroke-width', '2');
+  brainOutline.setAttribute('stroke-dasharray', '10 5');
+  brainOutline.id = 'brain-outline';
+  traceLayer.insertBefore(brainOutline, traceLayer.firstChild);
+  updateBrainOutline();
+}
+
+function updateBrainOutline() {
+  if (!brainOutline) return;
+  if (agentChips.size === 0) {
+    brainOutline.setAttribute('x', BRAIN_X); brainOutline.setAttribute('y', BRAIN_Y);
+    brainOutline.setAttribute('width', CHIP_W + BRAIN_PAD * 2); brainOutline.setAttribute('height', 60);
+    return;
+  }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const refs of agentChips.values()) {
+    const p = getTranslate(refs.g);
+    const w = parseFloat(refs.fo.getAttribute('width'));
+    const h = parseFloat(refs.fo.getAttribute('height'));
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x + w); y1 = Math.max(y1, p.y + h);
+  }
+  brainOutline.setAttribute('x', x0 - BRAIN_PAD); brainOutline.setAttribute('y', y0 - BRAIN_PAD - 18);
+  brainOutline.setAttribute('width', x1 - x0 + BRAIN_PAD * 2); brainOutline.setAttribute('height', y1 - y0 + BRAIN_PAD * 2 + 18);
+}
+
+buildBrainOutline();
+
+const brainLabel = document.createElementNS(NS, 'text');
+brainLabel.setAttribute('x', BRAIN_X + 4); brainLabel.setAttribute('y', BRAIN_Y - 4);
+brainLabel.setAttribute('fill', '#3ecf8e');
+brainLabel.setAttribute('font-family', 'Cascadia Code,Fira Code,Consolas,monospace');
+brainLabel.setAttribute('font-size', '10'); brainLabel.setAttribute('font-weight', '700');
+brainLabel.textContent = 'BRAIN';
+traceLayer.appendChild(brainLabel);
+
+function toSVG(cx, cy) {
+  const pt = board.createSVGPoint();
+  pt.x = cx; pt.y = cy;
+  return pt.matrixTransform(board.getScreenCTM().inverse());
+}
+
+function getTranslate(g) {
+  const t = g.getAttribute('transform') || 'translate(0,0)';
+  const m = t.match(/translate$\s*([-\d.]+)\s*,\s*([-\d.]+)\s*$/);
+  return {x: m ? parseFloat(m[1]) : 0, y: m ? parseFloat(m[2]) : 0};
+}
+
+function agentGridPos(index) {
+  const col = index % GRID_COLS;
+  const row = Math.floor(index / GRID_COLS);
+  return {x: BRAIN_X + BRAIN_PAD + col * (CHIP_W + GRID_GAP), y: BRAIN_Y + BRAIN_PAD + row * (CHIP_H + GRID_GAP)};
+}
+
+function createAgentChip(agent) {
+  const color = agentColor(agent);
+  const pos = agentGridPos(agentChips.size);
+  const g = document.createElementNS(NS, 'g');
+  g.id = `agent-${agent}`;
+  g.setAttribute('transform', `translate(${pos.x},${pos.y})`);
+
+  const outline = document.createElementNS(NS, 'rect');
+  outline.setAttribute('width', CHIP_W); outline.setAttribute('height', CHIP_H);
+  outline.setAttribute('rx', '6'); outline.setAttribute('fill', '#131318');
+  outline.setAttribute('stroke', color); outline.setAttribute('stroke-width', '1.5');
+  g.appendChild(outline);
+
+  const fo = document.createElementNS(NS, 'foreignObject');
+  fo.setAttribute('width', CHIP_W); fo.setAttribute('height', CHIP_H);
+
+  const body = document.createElement('div'); body.className = 'chip-body';
+  const head = document.createElement('div'); head.className = 'chip-head';
+  const pill = document.createElement('span'); pill.className = 'chip-agent';
+  pill.style.background = `rgba(${parseInt(color.slice(1,3),16)},${parseInt(color.slice(3,5),16)},${parseInt(color.slice(5,7),16)},0.15)`;
+  pill.style.color = color; pill.textContent = agent;
+  const tsEl = document.createElement('span'); tsEl.className = 'chip-ts';
+  head.append(pill, tsEl);
+
+  const images = document.createElement('div'); images.className = 'chip-images';
+  const leftH = document.createElement('div'); leftH.className = 'chip-img-half';
+  const leftTag = document.createElement('span'); leftTag.className = 'tag'; leftTag.textContent = 'RAW';
+  const leftImg = document.createElement('img'); leftImg.alt = '';
+  const leftPh = document.createElement('span'); leftPh.className = 'ph'; leftPh.textContent = '-';
+  leftH.append(leftTag, leftImg, leftPh);
+  const rightH = document.createElement('div'); rightH.className = 'chip-img-half';
+  const rightTag = document.createElement('span'); rightTag.className = 'tag'; rightTag.textContent = 'VLM';
+  const rightImg = document.createElement('img'); rightImg.alt = '';
+  const rightPh = document.createElement('span'); rightPh.className = 'ph'; rightPh.textContent = '-';
+  rightH.append(rightTag, rightImg, rightPh);
+  images.append(leftH, rightH);
+
+  const rowSys = document.createElement('div'); rowSys.className = 'chip-text sys';
+  rowSys.appendChild(Object.assign(document.createElement('span'), {className:'ph',textContent:'-'}));
+  const rowUsr = document.createElement('div'); rowUsr.className = 'chip-text usr';
+  rowUsr.appendChild(Object.assign(document.createElement('span'), {className:'ph',textContent:'-'}));
+  const rowReply = document.createElement('div'); rowReply.className = 'chip-text reply';
+  rowReply.appendChild(Object.assign(document.createElement('span'), {className:'ph',textContent:'-'}));
+
+  const resizeHandle = document.createElement('div'); resizeHandle.className = 'resize-handle';
+  body.append(head, images, rowSys, rowUsr, rowReply, resizeHandle);
+  fo.appendChild(body); g.appendChild(fo); nodeLayer.appendChild(g);
+
+  const refs = {g, fo, outline, head, leftImg, leftPh, rightImg, rightPh, rowSys, rowUsr, rowReply, tsEl, color, agent};
+  agentChips.set(agent, refs);
+  setupDrag(refs.head, refs.g, () => { updateBrainOutline(); rebuildAgentTraces(agent); });
+  setupResize(refs);
+  updateBrainOutline();
+  rebuildAgentTraces(agent);
+  return refs;
+}
+
+function setupDrag(handle, g, onMove) {
+  let dragging = false, sx = 0, sy = 0, tx = 0, ty = 0;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); e.stopPropagation(); dragging = true;
+    const pt = toSVG(e.clientX, e.clientY); sx = pt.x; sy = pt.y;
+    const t = getTranslate(g); tx = t.x; ty = t.y;
+    nodeLayer.appendChild(g);
+    const mv = (e2) => { if (!dragging) return; const p = toSVG(e2.clientX, e2.clientY); g.setAttribute('transform', `translate(${tx+p.x-sx},${ty+p.y-sy})`); if (onMove) onMove(); };
+    const up = () => { dragging = false; document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+  });
+}
+
+function setupResize(refs) {
+  const handle = refs.fo.querySelector('.resize-handle');
+  let resizing = false, sx = 0, sy = 0, sw = 0, sh = 0;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); e.stopPropagation(); resizing = true;
+    const pt = toSVG(e.clientX, e.clientY); sx = pt.x; sy = pt.y;
+    sw = parseFloat(refs.fo.getAttribute('width')); sh = parseFloat(refs.fo.getAttribute('height'));
+    const mv = (e2) => {
+      if (!resizing) return;
+      const p = toSVG(e2.clientX, e2.clientY);
+      const nw = Math.max(180, sw + p.x - sx), nh = Math.max(120, sh + p.y - sy);
+      refs.fo.setAttribute('width', nw); refs.fo.setAttribute('height', nh);
+      refs.outline.setAttribute('width', nw); refs.outline.setAttribute('height', nh);
+      updateBrainOutline(); rebuildAgentTraces(refs.agent);
+    };
+    const up = () => { resizing = false; document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+  });
+}
+
+function agentPinRight(agent) {
+  const r = agentChips.get(agent);
+  if (!r) return pinPos('panel', 'device_in');
+  const p = getTranslate(r.g);
+  return {x: p.x + parseFloat(r.fo.getAttribute('width')), y: p.y + parseFloat(r.fo.getAttribute('height')) / 2};
+}
+
+function makeTrace(id, x1, y1, x2, y2, curve) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const cx = mx + (-dy / len) * (curve || 0), cy = my + (dx / len) * (curve || 0);
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
+  p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#252530');
+  p.setAttribute('stroke-width', '1.5'); p.setAttribute('marker-end', 'url(#ah)');
+  p.id = `trace-${id}`;
+  traceLayer.appendChild(p);
+  traceEls[id] = p;
+  return p;
+}
+
+function rebuildAgentTraces(agent) {
+  const k1 = `brain.${agent}->panel`, k2 = `panel->brain.${agent}`;
+  if (traceEls[k1]) { traceEls[k1].remove(); delete traceEls[k1]; }
+  if (traceEls[k2]) { traceEls[k2].remove(); delete traceEls[k2]; }
+  const pin = agentPinRight(agent);
+  const pl = pinPos('panel', 'device_in');
+  makeTrace(k1, pin.x, pin.y, pl.x, pl.y, 0);
+  makeTrace(k2, pl.x, pl.y + 14, pin.x, pin.y + 14, 0);
+}
+
+function rebuildInfraTraces() {
+  for (const t of FIXED_TRACES) {
+    if (traceEls[t.id]) { traceEls[t.id].remove(); delete traceEls[t.id]; }
+    const f = pinPos(t.from[0], t.from[1]);
+    const to = pinPos(t.to[0], t.to[1]);
+    makeTrace(t.id, f.x, f.y, to.x, to.y, 0);
+  }
+}
+
+function rebuildAllTraces() {
+  rebuildInfraTraces();
+  for (const a of agentChips.keys()) rebuildAgentTraces(a);
+}
+rebuildAllTraces();
+
+function flashTrace(traceId, isError) {
+  const el = traceEls[traceId];
+  if (!el) return;
+  const col = isError ? '#ff4455' : '#4a9eff';
+  gsap.to(el, {attr: {'stroke': col, 'stroke-width': 3}, duration: 0.15,
+    onComplete: () => gsap.to(el, {attr: {'stroke': '#252530', 'stroke-width': 1.5}, duration: 0.8})
+  });
+  el.setAttribute('marker-end', isError ? 'url(#ah-red)' : 'url(#ah-blue)');
+  setTimeout(() => el.setAttribute('marker-end', 'url(#ah)'), 1000);
+}
+
+function flashPin(nodeId, pinName, isError) {
+  const el = document.getElementById(`pin-${nodeId}-${pinName}`);
+  if (!el) return;
+  gsap.to(el, {attr: {r: 6, fill: isError ? '#ff4455' : '#4a9eff'}, duration: 0.15,
+    onComplete: () => gsap.to(el, {attr: {r: 3, fill: '#252530'}, duration: 0.6})
+  });
+}
+
+function animatePacket(traceId, label, isError) {
+  const pathEl = traceEls[traceId];
+  if (!pathEl) return;
+  flashTrace(traceId, isError);
+
+  const col = isError ? '#ff4455' : '#4a9eff';
+  const dot = document.createElementNS(NS, 'circle');
+  dot.setAttribute('r', '5'); dot.setAttribute('fill', col); dot.setAttribute('opacity', '0.9');
+  packetLayer.appendChild(dot);
+
+  let labelG = null;
+  if (label) {
+    const short = label.length > 50 ? label.slice(0, 50) + '...' : label;
+    labelG = document.createElementNS(NS, 'g');
+    const bg = document.createElementNS(NS, 'rect');
+    bg.setAttribute('rx', '2'); bg.setAttribute('fill', 'rgba(10,10,12,0.9)');
+    bg.setAttribute('stroke', col); bg.setAttribute('stroke-width', '0.5');
+    bg.setAttribute('height', '12'); bg.setAttribute('y', '-14');
+    const txt = document.createElementNS(NS, 'text');
+    txt.setAttribute('y', '-5'); txt.setAttribute('fill', '#e0e0ea');
+    txt.setAttribute('font-family', 'Cascadia Code,Fira Code,Consolas,monospace');
+    txt.setAttribute('font-size', '7'); txt.textContent = short;
+    labelG.appendChild(bg); labelG.appendChild(txt);
+    packetLayer.appendChild(labelG);
+    requestAnimationFrame(() => {
+      try { const bb = txt.getBBox(); bg.setAttribute('width', String(bb.width + 6)); bg.setAttribute('x', '-3'); } catch {}
+    });
+  }
+
+  const tl = gsap.timeline({
+    onUpdate: () => {
+      if (labelG) { labelG.setAttribute('transform', dot.getAttribute('transform') || ''); }
+    },
+    onComplete: () => {
+      gsap.to(dot, {attr: {r: 2, opacity: 0.4}, duration: 0.3});
+      if (labelG) gsap.to(labelG, {opacity: 0, duration: 0.5, onComplete: () => { try { packetLayer.removeChild(labelG); } catch {} }});
+      setTimeout(() => { gsap.to(dot, {opacity: 0, duration: 2, onComplete: () => { try { packetLayer.removeChild(dot); } catch {} }}); }, 3000);
+    }
+  });
+
+  tl.to(dot, {
+    motionPath: {path: pathEl, align: pathEl, alignOrigin: [0.5, 0.5]},
+    duration: 1.5, ease: 'power1.inOut',
+  });
+}
+
+function resolveTraceId(d) {
+  const et = EVENT_TRACE_MAP[d.event];
+  if (et && traceEls[et]) return et;
+  const from = d.from || 'panel', to = d.to || 'panel';
+  if (from.startsWith('brain.')) {
+    const a = from.slice(6);
+    if (agentChips.has(a) && to === 'panel') return `brain.${a}->panel`;
+  }
+  if (to.startsWith('brain.') || to === 'brain') {
+    const a = d.agent || '';
+    if (a && agentChips.has(a)) return `panel->brain.${a}`;
+  }
+  const simple = `${from}->${to}`;
+  if (traceEls[simple]) return simple;
+  return null;
+}
+
+function getOrCreate(agent) {
+  if (agentChips.has(agent)) return agentChips.get(agent);
+  return createAgentChip(agent);
+}
+
+function showImg(imgEl, phEl, b64) {
+  imgEl.style.display = 'block'; phEl.style.display = 'none';
+  imgEl.src = `data:image/png;base64,${b64}`;
+}
+
+function setRow(row, text) {
+  row.textContent = '';
+  if (text && text !== SENTINEL) { row.textContent = text; }
+  else { const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '-'; row.appendChild(ph); }
+}
+
+function setReplyRow(row, text, fr) {
+  row.textContent = '';
+  if (text && text !== SENTINEL) { row.textContent = text; }
+  else { const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '-'; row.appendChild(ph); }
+  if (fr && fr !== SENTINEL) {
+    const badge = document.createElement('span'); badge.className = 'chip-fr';
+    badge.classList.add(fr === 'stop' ? 'stop' : fr === 'length' ? 'length' : fr === 'error' ? 'error' : 'unknown');
+    badge.textContent = fr; row.appendChild(badge);
+  }
+}
+
+function tsStr() {
+  const d = new Date();
+  return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+}
+
+function updateFromState(d) {
+  const agent = d.agent;
+  if (!agent || agent === SENTINEL) return;
+  const c = getOrCreate(agent);
+  c.tsEl.textContent = tsStr();
+  if (d.raw_image_b64 && d.raw_image_b64 !== SENTINEL) showImg(c.leftImg, c.leftPh, d.raw_image_b64);
+  if (d.vlm_image_b64 && d.vlm_image_b64 !== SENTINEL) showImg(c.rightImg, c.rightPh, d.vlm_image_b64);
+  setRow(c.rowSys, d.system_prompt);
+  setRow(c.rowUsr, d.user_message);
+  setReplyRow(c.rowReply, d.vlm_reply, d.finish_reason);
+}
+
+async function postResult(requestId, imageB64) {
+  try { await fetch(`${PANEL}/result`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({request_id: requestId, image_b64: imageB64})}); } catch {}
+}
+
+const drawPolygonOn = (ctx, ov, w, h) => {
+  const N = 1000;
+  const pts = (ov.points||[]).map(p=>[(p[0]||0)*w/N,(p[1]||0)*h/N]);
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  if (ov.closed) ctx.closePath();
+  if (ov.fill){ctx.fillStyle=ov.fill;ctx.fill();}
+  if (ov.stroke){ctx.strokeStyle=ov.stroke;ctx.lineWidth=ov.stroke_width||1;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();}
+  if (ov.label && pts.length > 0) {
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p[0]; cy += p[1]; }
+    cx /= pts.length; cy /= pts.length;
+    const fs = Math.max(10, Math.min(w, h) * 0.025);
+    ctx.font = `bold ${fs}px system-ui,sans-serif`;
+    const tw = ctx.measureText(ov.label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(cx - tw/2 - 3, cy - fs/2 - 3, tw + 6, fs + 6);
+    ctx.fillStyle = ov.stroke || '#ffffff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(ov.label, cx, cy);
+  }
+  ctx.restore();
+};
+
+const renderAnnotated = async (raw_b64, overlays) => {
+  const img = await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=`data:image/png;base64,${raw_b64}`;});
+  const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
+  const ctx = oc.getContext('2d');
+  ctx.drawImage(img,0,0);
+  for (const ov of overlays) drawPolygonOn(ctx, ov, img.naturalWidth, img.naturalHeight);
+  const blob = await oc.convertToBlob({type:'image/png'});
+  const reader = new FileReader();
+  return new Promise(res => { reader.onload = () => res(reader.result.split(',')[1]); reader.readAsDataURL(blob); });
+};
+
+const LOG_MAX = 150;
+const eventLog = [];
+let logRefs = null;
+
+function buildEventLog() {
+  const g = document.createElementNS(NS, 'g');
+  g.id = 'event-log-chip';
+  g.setAttribute('transform', 'translate(1150, 100)');
+  const outline = document.createElementNS(NS, 'rect');
+  outline.setAttribute('width', 380); outline.setAttribute('height', 280);
+  outline.setAttribute('rx', '6'); outline.setAttribute('fill', '#0d0d12');
+  outline.setAttribute('stroke', '#555568'); outline.setAttribute('stroke-width', '1');
+  g.appendChild(outline);
+  const fo = document.createElementNS(NS, 'foreignObject');
+  fo.setAttribute('width', 380); fo.setAttribute('height', 280);
+  const body = document.createElement('div'); body.className = 'elog-body';
+  const head = document.createElement('div'); head.className = 'elog-head'; head.textContent = 'EVENT LOG';
+  const list = document.createElement('div'); list.className = 'elog-list';
+  body.append(head, list); fo.appendChild(body); g.appendChild(fo); nodeLayer.appendChild(g);
+  logRefs = {g, fo, outline, head, list};
+  setupDrag(head, g, null);
+}
+buildEventLog();
+
+function addLogEntry(d) {
+  if (!logRefs) return;
+  const row = document.createElement('div');
+  row.className = 'elog-row' + (d.error ? ' err' : '');
+  const ts = document.createElement('span'); ts.className = 'elog-ts';
+  const dt = d.ts ? new Date(d.ts * 1000) : new Date();
+  ts.textContent = `${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}:${dt.getSeconds().toString().padStart(2,'0')}`;
+  const ev = document.createElement('span'); ev.className = 'elog-ev'; ev.textContent = d.event || '';
+  const ag = document.createElement('span'); ag.className = 'elog-ag'; ag.textContent = d.agent || '';
+  const lbl = document.createElement('span'); lbl.className = 'elog-lbl'; lbl.textContent = d.label || '';
+  row.append(ts, ev, ag, lbl);
+  logRefs.list.appendChild(row);
+  eventLog.push(row);
+  while (eventLog.length > LOG_MAX) { const old = eventLog.shift(); try { logRefs.list.removeChild(old); } catch {} }
+  logRefs.list.scrollTop = logRefs.list.scrollHeight;
+}
+
+function updateProgress(index, total) {
+  totalEvents = total || totalEvents;
+  document.getElementById('cpf').style.width = (totalEvents > 0 ? index / totalEvents * 100 : 0) + '%';
+  document.getElementById('cpt').textContent = `${index}/${totalEvents}`;
+}
+
+function ctrl(action, extra) {
+  const b = {action};
+  if (extra) Object.assign(b, extra);
+  fetch(`${PANEL}/control`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)}).catch(()=>{});
+}
+
+document.getElementById('cp').addEventListener('click', () => ctrl('play'));
+document.getElementById('cpa').addEventListener('click', () => ctrl('pause'));
+document.getElementById('cs').addEventListener('click', () => ctrl('step'));
+document.getElementById('cr').addEventListener('click', () => ctrl('stop'));
+document.getElementById('cm').addEventListener('click', () => {
+  currentSpeed = Math.max(0.1, currentSpeed / 2);
+  document.getElementById('csp').textContent = currentSpeed.toFixed(1) + 'x';
+  ctrl('speed', {speed: currentSpeed});
+});
+document.getElementById('cf').addEventListener('click', () => {
+  currentSpeed = Math.min(100, currentSpeed * 2);
+  document.getElementById('csp').textContent = currentSpeed.toFixed(1) + 'x';
+  ctrl('speed', {speed: currentSpeed});
+});
+document.getElementById('cpb').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  ctrl('seek', {index: Math.floor((e.clientX - rect.left) / rect.width * totalEvents)});
+});
+
+const es = new EventSource(`${PANEL}/agent-events?agent=ui`);
+es.addEventListener('connected', () => { document.getElementById('cdot').classList.add('live'); });
+es.onerror = () => { document.getElementById('cdot').classList.remove('live'); };
+
+es.addEventListener('agent_state', e => {
+  let d; try { d = JSON.parse(e.data); } catch { return; }
+  updateFromState(d);
+});
+
+es.addEventListener('annotate', async e => {
+  let d; try { d = JSON.parse(e.data); } catch { return; }
+  if (d.image_b64 !== SENTINEL) {
+    if ((d.overlays||[]).length > 0) {
+      try { const ab = await renderAnnotated(d.image_b64, d.overlays); await postResult(d.request_id, ab); } catch {}
+    } else { await postResult(d.request_id, d.image_b64); }
+  } else { await postResult(d.request_id, SENTINEL); }
+});
+
+es.addEventListener('message', e => {});
+
+es.addEventListener('diagram_flow', e => {
+  let d; try { d = JSON.parse(e.data); } catch { return; }
+  if (d.agent && d.agent !== '' && (d.from || '').startsWith('brain')) getOrCreate(d.agent);
+  addLogEntry(d);
+  const traceId = resolveTraceId(d);
+  if (traceId) animatePacket(traceId, d.label || d.event || '', !!d.error);
+});
+
+es.addEventListener('replay_status', e => {
+  let d; try { d = JSON.parse(e.data); } catch { return; }
+  if (d.status === 'finished') updateProgress(d.index, d.total);
+});
+
+fetch(`${PANEL}/ready`).then(r=>r.json()).then(d=>{
+  if (d.replay) document.getElementById('ctrl-bar').style.display = 'flex';
+}).catch(()=>{});
+
+fetch(`${PANEL}/status`).then(r=>r.json()).then(d=>{
+  if (d.replay) {
+    document.getElementById('ctrl-bar').style.display = 'flex';
+    updateProgress(d.index, d.total);
+    currentSpeed = d.speed || 1.0;
+    document.getElementById('csp').textContent = currentSpeed.toFixed(1) + 'x';
+  }
+}).catch(()=>{});
+</script>
+</body>
+</html>
